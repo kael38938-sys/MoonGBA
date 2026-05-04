@@ -25,16 +25,35 @@ Java_com_moonlight_moongba_EmuCore_nativeLoadRom(JNIEnv* env, jobject thiz, jbyt
 
 JNIEXPORT jbyteArray JNICALL
 Java_com_moonlight_moongba_EmuCore_nativeStepFrame(JNIEnv* env, jobject thiz) {
-    for (int i = 0; i < 16000; i++) gba_cpu_step(&sys.cpu, &sys.mem);
+    // Run CPU for one frame (simplified)
+    for (int i = 0; i < 16000; i++) {
+        gba_cpu_step(&sys.cpu, &sys.mem);
+    }
 
+    // 🔴🔵 TEST PATTERN: Bright checkerboard
     for (int y = 0; y < GBA_H; y++) {
         for (int x = 0; x < GBA_W; x++) {
-            uint32_t col = ((x ^ y) & 0x10) ? 0xFF0000FF : 0xFFFF0000;
-            sys.ppu.buffer[y * GBA_W + x] = col;
+            // Create 20x20 pixel checkerboard squares
+            int block_x = x / 20;
+            int block_y = y / 20;
+            
+            uint32_t color;
+            if ((block_x + block_y) % 2 == 0) {
+                // Bright RED
+                color = 0xFFFF0000;  // RGBA: Red=255, Green=0, Blue=0, Alpha=255
+            } else {
+                // Bright BLUE
+                color = 0xFF0000FF;  // RGBA: Red=0, Green=0, Blue=255, Alpha=255
+            }
+            
+            sys.ppu.buffer[y * GBA_W + x] = color;
         }
     }
+
+    // Copy to output buffer
     memcpy(frame_buf, sys.ppu.buffer, FRAME_SIZE);
 
+    // Return frame to Java
     jbyteArray arr = (*env)->NewByteArray(env, FRAME_SIZE);
     (*env)->SetByteArrayRegion(env, arr, 0, FRAME_SIZE, (jbyte*)frame_buf);
     return arr;
