@@ -3,6 +3,7 @@ package com.moonlight.moongba
 import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -22,7 +23,7 @@ class MainActivity : AppCompatActivity() {
         if (isGranted) {
             pickRomFile()
         } else {
-            Toast.makeText(this, "Storage permission required", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Storage permission required to load ROMs", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -46,8 +47,8 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
-        binding.btnLoadRom.setOnClickListener {
-            checkPermissionAndPickRom()        }
+        binding.btnLoadRom.setOnClickListener {            checkPermissionAndPickRom()
+        }
 
         binding.btnStart.setOnClickListener {
             if (emulatorView?.isRunning == true) {
@@ -65,21 +66,27 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkPermissionAndPickRom() {
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_IMAGES
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+
         when {
             ContextCompat.checkSelfPermission(
                 this,
-                Manifest.permission.READ_EXTERNAL_STORAGE
+                permission
             ) == PackageManager.PERMISSION_GRANTED -> {
                 pickRomFile()
             }
             else -> {
-                requestPermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+                requestPermissionLauncher.launch(permission)
             }
         }
     }
 
     private fun pickRomFile() {
-        romPickerLauncher.launch("application/octet-stream")
+        romPickerLauncher.launch("*/*")
     }
 
     private fun loadRom(uri: Uri) {
@@ -88,15 +95,24 @@ class MainActivity : AppCompatActivity() {
             if (romBytes != null) {
                 if (EmuCore.nativeLoadRom(romBytes)) {
                     currentRomPath = uri
-                    binding.tvRomName.text = "Loaded: ${uri.lastPathSegment}"
-                    Toast.makeText(this, "ROM loaded", Toast.LENGTH_SHORT).show()
+                    val fileName = getFileName(uri)
+                    binding.tvRomName.text = "Loaded: $fileName"                    Toast.makeText(this, "ROM loaded successfully", Toast.LENGTH_SHORT).show()
                 } else {
                     Toast.makeText(this, "Failed to load ROM", Toast.LENGTH_SHORT).show()
                 }
             }
         } catch (e: Exception) {
             Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-        }    }
+        }
+    }
+
+    private fun getFileName(uri: Uri): String {
+        return contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+            cursor.moveToFirst()
+            cursor.getString(nameIndex)
+        } ?: uri.lastPathSegment ?: "unknown.gba"
+    }
 
     override fun onPause() {
         super.onPause()
