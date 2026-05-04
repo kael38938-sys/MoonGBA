@@ -1,5 +1,6 @@
 #include <jni.h>
 #include <android/log.h>
+#include <string.h>      // ADD THIS - needed for memset/memcpy
 #include "gba.h"
 
 static GbaSystem sys;
@@ -20,6 +21,7 @@ Java_com_moonlight_moongba_EmuCore_nativeLoadRom(JNIEnv* env, jobject thiz, jbyt
     jbyte* bytes = (*env)->GetByteArrayElements(env, rom, NULL);
     bool ok = gba_load_rom(&sys.mem, (const uint8_t*)bytes, len);
     (*env)->ReleaseByteArrayElements(env, rom, bytes, JNI_ABORT);
+    __android_log_print(ANDROID_LOG_INFO, "GBA-JNI", "ROM loaded: %d bytes, ok=%d", len, ok);
     return ok ? JNI_TRUE : JNI_FALSE;
 }
 
@@ -30,30 +32,28 @@ Java_com_moonlight_moongba_EmuCore_nativeStepFrame(JNIEnv* env, jobject thiz) {
         gba_cpu_step(&sys.cpu, &sys.mem);
     }
 
-    // 🔴🔵 TEST PATTERN: Bright checkerboard
+    // Test pattern: checkerboard with CORRECT byte order for little-endian
+    // We want Kotlin to read: [B, G, R, A] from memory
+    // So uint32_t value = (A<<24)|(R<<16)|(G<<8)|B
     for (int y = 0; y < GBA_H; y++) {
         for (int x = 0; x < GBA_W; x++) {
-            // Create 20x20 pixel checkerboard squares
             int block_x = x / 20;
             int block_y = y / 20;
             
             uint32_t color;
             if ((block_x + block_y) % 2 == 0) {
-                // Bright RED
-                color = 0xFFFF0000;  // RGBA: Red=255, Green=0, Blue=0, Alpha=255
+                // Bright RED: A=255, R=255, G=0, B=0
+                color = (0xFFu << 24) | (0xFFu << 16) | (0x00u << 8) | 0x00u;
             } else {
-                // Bright BLUE
-                color = 0xFF0000FF;  // RGBA: Red=0, Green=0, Blue=255, Alpha=255
+                // Bright BLUE: A=255, R=0, G=0, B=255
+                color = (0xFFu << 24) | (0x00u << 16) | (0x00u << 8) | 0xFFu;
             }
-            
             sys.ppu.buffer[y * GBA_W + x] = color;
         }
     }
 
-    // Copy to output buffer
     memcpy(frame_buf, sys.ppu.buffer, FRAME_SIZE);
 
-    // Return frame to Java
     jbyteArray arr = (*env)->NewByteArray(env, FRAME_SIZE);
     (*env)->SetByteArrayRegion(env, arr, 0, FRAME_SIZE, (jbyte*)frame_buf);
     return arr;
