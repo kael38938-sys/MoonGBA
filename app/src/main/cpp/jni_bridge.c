@@ -6,7 +6,7 @@ static GbaSystem sys;
 static uint8_t frame_buf[FRAME_SIZE];
 
 JNIEXPORT jboolean JNICALL
-Java_com_example_gbaemulator_EmuCore_nativeInit(JNIEnv* env, jobject thiz) {
+Java_com_moonlight_moongba_EmuCore_nativeInit(JNIEnv* env, jobject thiz) {
     gba_cpu_reset(&sys.cpu);
     memset(&sys.mem, 0, sizeof(sys.mem));
     memset(&sys.ppu, 0, sizeof(sys.ppu));
@@ -15,7 +15,7 @@ Java_com_example_gbaemulator_EmuCore_nativeInit(JNIEnv* env, jobject thiz) {
 }
 
 JNIEXPORT jboolean JNICALL
-Java_com_example_gbaemulator_EmuCore_nativeLoadRom(JNIEnv* env, jobject thiz, jbyteArray rom) {
+Java_com_moonlight_moongba_EmuCore_nativeLoadRom(JNIEnv* env, jobject thiz, jbyteArray rom) {
     jsize len = (*env)->GetArrayLength(env, rom);
     jbyte* bytes = (*env)->GetByteArrayElements(env, rom, NULL);
     bool ok = gba_load_rom(&sys.mem, (const uint8_t*)bytes, len);
@@ -24,7 +24,7 @@ Java_com_example_gbaemulator_EmuCore_nativeLoadRom(JNIEnv* env, jobject thiz, jb
 }
 
 JNIEXPORT jbyteArray JNICALL
-Java_com_example_gbaemulator_EmuCore_nativeStepFrame(JNIEnv* env, jobject thiz) {
+Java_com_moonlight_moongba_EmuCore_nativeStepFrame(JNIEnv* env, jobject thiz) {
     // Run ~1 frame of cycles (tune later with accurate timing)
     for (int i = 0; i < 16000; i++) gba_cpu_step(&sys.cpu, &sys.mem);
 
