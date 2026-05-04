@@ -3,7 +3,6 @@ package com.moonlight.moongba
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.Paint
 import android.graphics.PixelFormat
 import android.util.AttributeSet
 import android.util.Log
@@ -16,11 +15,12 @@ class EmulatorView @JvmOverloads constructor(
 ) : SurfaceView(context, attrs), SurfaceHolder.Callback {
 
     interface EmulatorCoreInterface {
-        fun stepFrame(): ByteArray
+        fun stepFrame(): IntArray  // Return IntArray directly, not ByteArray
     }
 
     private var core: EmulatorCoreInterface? = null
     private var running = false
+    private var thread: Thread? = null
 
     init {
         holder.setFormat(PixelFormat.RGB_565)
@@ -35,34 +35,48 @@ class EmulatorView @JvmOverloads constructor(
     }
 
     fun start() {
-        if (running || core == null) return
+        if (running || core == null) {
+            Log.w("EmulatorView", "Start failed: running=$running, core=${core != null}")
+            return
+        }
         running = true
-        renderLoop()
+        thread = Thread({ renderLoop() }, "GBARender")
+        thread?.start()
+        Log.d("EmulatorView", "Render thread started")
     }
 
     fun stop() {
         running = false
+        thread?.join(500)
+        thread = null
+        Log.d("EmulatorView", "Render thread stopped")
+    }
+
+    fun pause() {
+        stop()
+    }
+
+    fun resume() {
+        // Don't auto-start — let user press button
     }
 
     fun isRunning(): Boolean = running
 
     private fun renderLoop() {
-        Thread {
-            while (running) {
-                try {
-                    val frameData = core?.stepFrame()
-                    if (frameData != null) {
-                        onImageUpdate(frameData)
-                    }
-                    Thread.sleep(16)
-                } catch (e: Exception) {
-                    Log.e("EmulatorView", "Render loop error", e)
+        while (running) {
+            try {
+                val frameData = core?.stepFrame()
+                if (frameData != null) {
+                    onImageUpdate(frameData)
                 }
+                Thread.sleep(16)
+            } catch (e: Exception) {
+                Log.e("EmulatorView", "Render loop error", e)
             }
-        }.start()
+        }
     }
 
-    fun onImageUpdate(frameData: ByteArray) {
+    fun onImageUpdate(pixels: IntArray) {
         if (!holder.surface.isValid) {
             Log.w("EmulatorView", "Surface invalid")
             return
@@ -75,23 +89,7 @@ class EmulatorView @JvmOverloads constructor(
         }
 
         try {
-            // Convert RGBA bytes to IntArray for direct canvas draw
-            val pixels = IntArray(240 * 160)
-            var i = 0
-            var p = 0
-            while (i + 3 < frameData.size && p < pixels.size) {
-                val r = frameData[i].toInt() and 0xFF
-                val g = frameData[i + 1].toInt() and 0xFF
-                val b = frameData[i + 2].toInt() and 0xFF
-                val a = frameData[i + 3].toInt() and 0xFF
-                pixels[p] = (a shl 24) or (r shl 16) or (g shl 8) or b
-                i += 4
-                p++
-            }
-
-            // Draw directly — no Bitmap object needed
             canvas.drawBitmap(pixels, 0, 240, 0f, 0f, 240, 160, false, null)
-
         } catch (e: Exception) {
             Log.e("EmulatorView", "onImageUpdate error", e)
         } finally {
