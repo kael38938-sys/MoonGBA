@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.util.AttributeSet
+import android.util.Log
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import java.util.concurrent.atomic.AtomicBoolean
@@ -36,16 +37,21 @@ class EmulatorView @JvmOverloads constructor(
     }
 
     fun start() {
-        if (running.get() || core == null) return
+        if (running.get() || core == null) {
+            Log.w("EmulatorView", "Start ignored: running=${running.get()}, core=${core != null}")
+            return
+        }
         running.set(true)
         thread = Thread(this, "GBARender")
         thread?.start()
+        Log.d("EmulatorView", "Render thread started")
     }
 
     fun stop() {
         running.set(false)
         try { thread?.join(500) } catch (e: Exception) {}
         thread = null
+        Log.d("EmulatorView", "Render thread stopped")
     }
     fun isRunning(): Boolean = running.get()
     fun pause() {}
@@ -61,11 +67,16 @@ class EmulatorView @JvmOverloads constructor(
                 }
                 val frameData = core?.stepFrame()
                 if (frameData != null) {
+                    if (frameData.size != 240 * 160 * 4) {
+                        Log.e("EmulatorView", "Bad frame size: ${frameData.size}")
+                    }
                     renderFrame(frameData)
+                } else {
+                    Log.w("EmulatorView", "stepFrame returned null")
                 }
                 Thread.sleep(16)
             } catch (e: Exception) {
-                // Ignore errors silently for now
+                Log.e("EmulatorView", "Render loop error", e)
             }
         }
     }
@@ -77,7 +88,16 @@ class EmulatorView @JvmOverloads constructor(
         var canvas: Canvas? = null
         try {
             canvas = holder.lockCanvas()
-            if (canvas == null) return
+            if (canvas == null) {
+                Log.w("EmulatorView", "lockCanvas returned null")
+                return
+            }
+
+            if (canvas.width <= 0 || canvas.height <= 0) {
+                Log.w("EmulatorView", "Canvas size zero: ${canvas.width}x${canvas.height}")
+                holder.unlockCanvasAndPost(canvas)
+                return
+            }
 
             if (frameBitmap == null || frameBitmap!!.width != 240 || frameBitmap!!.height != 160) {
                 frameBitmap = Bitmap.createBitmap(240, 160, Bitmap.Config.ARGB_8888)
@@ -87,9 +107,10 @@ class EmulatorView @JvmOverloads constructor(
             for (i in 0 until pixels.size) {
                 val offset = i * 4
                 if (offset + 3 < frameData.size) {
-                    val r = frameData[offset].toInt() and 0xFF
+                    // C uint32_t is little-endian: [B, G, R, A] in byte array
+                    val b = frameData[offset].toInt() and 0xFF
                     val g = frameData[offset + 1].toInt() and 0xFF
-                    val b = frameData[offset + 2].toInt() and 0xFF
+                    val r = frameData[offset + 2].toInt() and 0xFF
                     val a = frameData[offset + 3].toInt() and 0xFF
                     pixels[i] = (a shl 24) or (r shl 16) or (g shl 8) or b
                 } else {
@@ -110,9 +131,10 @@ class EmulatorView @JvmOverloads constructor(
             frameBitmap?.let { 
                 canvas.drawBitmap(it, null, android.graphics.Rect(left, top, left + destWidth, top + destHeight), paint)
             }
+            Log.d("EmulatorView", "Frame rendered: ${canvas.width}x${canvas.height}")
 
         } catch (e: Exception) {
-            // Ignore
+            Log.e("EmulatorView", "renderFrame error", e)
         } finally {
             if (canvas != null) {
                 holder.unlockCanvasAndPost(canvas)
@@ -120,7 +142,14 @@ class EmulatorView @JvmOverloads constructor(
         }
     }
 
-    override fun surfaceCreated(holder: SurfaceHolder) {}
-    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {}
-    override fun surfaceDestroyed(holder: SurfaceHolder) { stop() }
+    override fun surfaceCreated(holder: SurfaceHolder) {
+        Log.d("EmulatorView", "Surface created")
+    }
+    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+        Log.d("EmulatorView", "Surface changed: ${width}x${height}")
+    }
+    override fun surfaceDestroyed(holder: SurfaceHolder) { 
+        Log.d("EmulatorView", "Surface destroyed")
+        stop() 
+    }
 }
