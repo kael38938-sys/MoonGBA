@@ -12,8 +12,6 @@ class MainActivity : AppCompatActivity() {
     private var emulatorView: EmulatorView? = null
     private var currentRomPath: Uri? = null
 
-    // No permission launcher needed anymore!
-    
     private val romPickerLauncher = registerForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -34,7 +32,6 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
-        // Direct click to open picker - No permission check!
         binding.btnLoadRom.setOnClickListener {
             romPickerLauncher.launch("*/*")
         }
@@ -62,7 +59,7 @@ class MainActivity : AppCompatActivity() {
                     currentRomPath = uri
                     val fileName = getFileName(uri)
                     binding.tvRomName.text = "Loaded: $fileName"
-                    Toast.makeText(this, "ROM loaded successfully", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "ROM loaded", Toast.LENGTH_SHORT).show()
                 } else {
                     Toast.makeText(this, "Failed to load ROM", Toast.LENGTH_SHORT).show()
                 }
