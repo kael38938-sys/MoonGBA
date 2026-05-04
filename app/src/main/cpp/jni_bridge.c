@@ -25,10 +25,8 @@ Java_com_moonlight_moongba_EmuCore_nativeLoadRom(JNIEnv* env, jobject thiz, jbyt
 
 JNIEXPORT jbyteArray JNICALL
 Java_com_moonlight_moongba_EmuCore_nativeStepFrame(JNIEnv* env, jobject thiz) {
-    // Run ~1 frame of cycles (tune later with accurate timing)
     for (int i = 0; i < 16000; i++) gba_cpu_step(&sys.cpu, &sys.mem);
 
-    // Output test pattern (checkerboard)
     for (int y = 0; y < GBA_H; y++) {
         for (int x = 0; x < GBA_W; x++) {
             uint32_t col = ((x ^ y) & 0x10) ? 0xFF0000FF : 0xFFFF0000;
