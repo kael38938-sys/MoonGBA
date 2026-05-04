@@ -2,6 +2,7 @@ package com.moonlight.moongba
 
 import android.net.Uri
 import android.os.Bundle
+import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -27,7 +28,7 @@ class MainActivity : AppCompatActivity() {
 
         emulatorView = binding.emulatorView
         emulatorView?.setEmulatorCore(object : EmulatorView.EmulatorCoreInterface {
-            override fun stepFrame(): ByteArray {
+            override fun stepFrame(): IntArray {
                 return EmuCore.nativeStepFrame()
             }
         })
