@@ -2,111 +2,152 @@ package com.moonlight.moongba
 
 import android.content.Context
 import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.PixelFormat
 import android.util.AttributeSet
-import android.util.Log
 import android.view.SurfaceHolder
 import android.view.SurfaceView
+
+// Simple enum for scaling modes
+enum class ScalingMode {
+    ORIGINAL,
+    PROPORTIONAL,
+    STRETCH,
+    X2
+}
 
 class EmulatorView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null
 ) : SurfaceView(context, attrs), SurfaceHolder.Callback {
 
-    interface EmulatorCoreInterface {
-        fun stepFrame(): IntArray  // Return IntArray directly, not ByteArray
+    companion object {
+        const val VIDEO_W = 240
+        const val VIDEO_H = 160
     }
 
-    private var core: EmulatorCoreInterface? = null
-    private var running = false
-    private var thread: Thread? = null
+    private var emulator: Emulator? = null
+    private var scalingMode = ScalingMode.PROPORTIONAL
+    private var actualWidth = 0
+    private var actualHeight = 0
+    private var aspectRatio = 0f
 
     init {
-        holder.setFormat(PixelFormat.RGB_565)
-        holder.setFixedSize(240, 160)
-        holder.setKeepScreenOn(true)
+        val holder = holder
+        // 16-bit color for better performance on mobile
+        holder.setFormat(PixelFormat.RGB_565) 
+        holder.setFixedSize(VIDEO_W, VIDEO_H)
         holder.addCallback(this)
-        setBackgroundColor(Color.BLACK)
+        setFocusableInTouchMode(true)
+        requestFocus()
     }
 
-    fun setEmulatorCore(core: EmulatorCoreInterface) {
-        this.core = core
+    fun setEmulator(emulator: Emulator) {
+        this.emulator = emulator
     }
 
-    fun start() {
-        if (running || core == null) {
-            Log.w("EmulatorView", "Start failed: running=$running, core=${core != null}")
-            return
-        }
-        running = true
-        thread = Thread({ renderLoop() }, "GBARender")
-        thread?.start()
-        Log.d("EmulatorView", "Render thread started")
+    fun setScalingMode(mode: ScalingMode) {
+        scalingMode = mode
+        requestLayout()        updateSurfaceSize()
     }
 
-    fun stop() {
-        running = false
-        thread?.join(500)
-        thread = null
-        Log.d("EmulatorView", "Render thread stopped")
-    }
-
-    fun pause() {
-        stop()
-    }
-
-    fun resume() {
-        // Don't auto-start — let user press button
-    }
-
-    fun isRunning(): Boolean = running
-
-    private fun renderLoop() {
-        while (running) {
-            try {
-                val frameData = core?.stepFrame()
-                if (frameData != null) {
-                    onImageUpdate(frameData)
-                }
-                Thread.sleep(16)
-            } catch (e: Exception) {
-                Log.e("EmulatorView", "Render loop error", e)
-            }
-        }
-    }
-
-    fun onImageUpdate(pixels: IntArray) {
-        if (!holder.surface.isValid) {
-            Log.w("EmulatorView", "Surface invalid")
-            return
-        }
-
+    /**
+     * Called by the Emulator thread when a frame is ready.
+     * Expects an IntArray of pixels (ARGB_8888 usually).
+     */
+    fun onImageUpdate(data: IntArray) {
+        val holder = holder
         val canvas: Canvas? = holder.lockCanvas()
-        if (canvas == null) {
-            Log.w("EmulatorView", "lockCanvas returned null")
-            return
-        }
-
-        try {
-            canvas.drawBitmap(pixels, 0, 240, 0f, 0f, 240, 160, false, null)
-        } catch (e: Exception) {
-            Log.e("EmulatorView", "onImageUpdate error", e)
-        } finally {
+        
+        if (canvas != null) {
+            // Draw the bitmap data to the canvas
+            canvas.drawBitmap(data, 0, VIDEO_W, 0f, 0f, VIDEO_W.toFloat(), VIDEO_H.toFloat(), false, null)
             holder.unlockCanvasAndPost(canvas)
         }
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {
-        Log.d("EmulatorView", "Surface created")
-    }
-
-    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-        Log.d("EmulatorView", "Surface changed: ${width}x${height}")
+        // Surface ready
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
-        Log.d("EmulatorView", "Surface destroyed")
-        stop()
+        emulator?.setRenderSurface(null, 0, 0)
+    }
+
+    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+        emulator?.setRenderSurface(this, width, height)
+    }
+
+    fun setActualSize(w: Int, h: Int) {
+        if (actualWidth != w || actualHeight != h) {
+            actualWidth = w
+            actualHeight = h
+            updateSurfaceSize()
+        }
+    }
+
+    fun setAspectRatio(ratio: Float) {
+        if (aspectRatio != ratio) {
+            aspectRatio = ratio
+            updateSurfaceSize()
+        }
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        updateSurfaceSize()
+    }
+
+    private fun updateSurfaceSize() {        var viewWidth = width
+        var viewHeight = height
+        if (viewWidth == 0 || viewHeight == 0 || actualWidth == 0 || actualHeight == 0) return
+
+        var w = 0
+        var h = 0
+
+        if (scalingMode != ScalingMode.STRETCH && aspectRatio != 0f) {
+            val ratio = aspectRatio * actualHeight / actualWidth
+            viewWidth = (viewWidth / ratio).toInt()
+        }
+
+        when (scalingMode) {
+            ScalingMode.ORIGINAL -> {
+                w = viewWidth
+                h = viewHeight
+            }
+            ScalingMode.X2 -> {
+                w = viewWidth / 2
+                h = viewHeight / 2
+            }
+            ScalingMode.STRETCH -> {
+                if (viewWidth * actualHeight >= viewHeight * actualWidth) {
+                    w = actualWidth
+                    h = actualHeight
+                }
+            }
+            else -> {
+                // Proportional (default)
+                val viewRatio = viewWidth.toFloat() / viewHeight.toFloat()
+                val contentRatio = actualWidth.toFloat() / actualHeight.toFloat()
+                if (viewRatio > contentRatio) {
+                    h = viewHeight
+                    w = (h * contentRatio).toInt()
+                } else {
+                    w = viewWidth
+                    h = (w / contentRatio).toInt()
+                }
+            }
+        }
+
+        if (w < actualWidth || h < actualHeight) {
+            h = actualHeight
+            w = h * viewWidth / viewHeight
+            if (w < actualWidth) {
+                w = actualWidth
+                h = w * viewHeight / viewWidth
+            }
+        }
+        w = (w + 3) and 3.inv() // Align to 4 bytes
+        h = (h + 3) and 3.inv()
+
+        holder.setFixedSize(w, h)
     }
 }
