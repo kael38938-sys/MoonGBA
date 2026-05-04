@@ -16,7 +16,7 @@ android {
 
         externalNativeBuild {
             cmake {
-                cppFlags = ""
+                // Removed cppFlags line - not needed for basic build
             }
         }
         
