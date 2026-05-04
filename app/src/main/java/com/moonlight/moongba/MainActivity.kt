@@ -40,7 +40,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnStart.setOnClickListener {
-            if (emulatorView?.isRunning == true) {
+            if (emulatorView?.isRunning() == true) {
                 emulatorView?.stop()
                 binding.btnStart.text = "Start"
             } else {
