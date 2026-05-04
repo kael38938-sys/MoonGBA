@@ -1,15 +1,10 @@
 package com.moonlight.moongba
 
-import android.Manifest
-import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import com.moonlight.moongba.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
@@ -17,16 +12,8 @@ class MainActivity : AppCompatActivity() {
     private var emulatorView: EmulatorView? = null
     private var currentRomPath: Uri? = null
 
-    private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            pickRomFile()
-        } else {
-            Toast.makeText(this, "Storage permission required to load ROMs", Toast.LENGTH_SHORT).show()
-        }
-    }
-
+    // No permission launcher needed anymore!
+    
     private val romPickerLauncher = registerForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -47,7 +34,9 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
-        binding.btnLoadRom.setOnClickListener {            checkPermissionAndPickRom()
+        // Direct click to open picker - No permission check!
+        binding.btnLoadRom.setOnClickListener {
+            romPickerLauncher.launch("*/*")
         }
 
         binding.btnStart.setOnClickListener {
@@ -65,30 +54,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun checkPermissionAndPickRom() {
-        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Manifest.permission.READ_MEDIA_IMAGES
-        } else {
-            Manifest.permission.READ_EXTERNAL_STORAGE
-        }
-
-        when {
-            ContextCompat.checkSelfPermission(
-                this,
-                permission
-            ) == PackageManager.PERMISSION_GRANTED -> {
-                pickRomFile()
-            }
-            else -> {
-                requestPermissionLauncher.launch(permission)
-            }
-        }
-    }
-
-    private fun pickRomFile() {
-        romPickerLauncher.launch("*/*")
-    }
-
     private fun loadRom(uri: Uri) {
         try {
             val romBytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
@@ -96,7 +61,8 @@ class MainActivity : AppCompatActivity() {
                 if (EmuCore.nativeLoadRom(romBytes)) {
                     currentRomPath = uri
                     val fileName = getFileName(uri)
-                    binding.tvRomName.text = "Loaded: $fileName"                    Toast.makeText(this, "ROM loaded successfully", Toast.LENGTH_SHORT).show()
+                    binding.tvRomName.text = "Loaded: $fileName"
+                    Toast.makeText(this, "ROM loaded successfully", Toast.LENGTH_SHORT).show()
                 } else {
                     Toast.makeText(this, "Failed to load ROM", Toast.LENGTH_SHORT).show()
                 }
